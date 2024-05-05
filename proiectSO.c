@@ -143,10 +143,17 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
             if(pid == 0) {
+                char nr1[10] = "";
+                int ino1 = statBuffer.st_ino;
+                /*
+                Se extrage numarul inode (identificatorul unic al fisierului) din structura statBuffer 
+                si este stocat in variabila ino1.
+                */
+                sprintf(nr1, "%d", ino1);
                 char numeSnapshot1[MAX_SIZE] = "";
                 strcat(numeSnapshot1, dirOut);
                 strcat(numeSnapshot1, "/snapshot_");
-                strcat(numeSnapshot1, argv[i]);
+                strcat(numeSnapshot1, nr1);
                 strcat(numeSnapshot1, "_1.txt");
                 int fd1 = open(numeSnapshot1 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
                 if(fd1 < 0) {
@@ -157,10 +164,13 @@ int main(int argc, char *argv[]) {
                     if(statBuffer.st_size == 0) {
                         createSnapshot(argv[i], fd1);
                     }
+                    char nr2[10] = "";
+                    int ino2 = statBuffer.st_ino;
+                    sprintf(nr2, "%d", ino2);
                     char numeSnapshot2[MAX_SIZE] = "";
                     strcat(numeSnapshot2, dirOut);
                     strcat(numeSnapshot2, "/snapshot_");
-                    strcat(numeSnapshot2, argv[i]);
+                    strcat(numeSnapshot2, nr2);
                     strcat(numeSnapshot2, "_2.txt");
 
                     int fd2 = open(numeSnapshot2 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);

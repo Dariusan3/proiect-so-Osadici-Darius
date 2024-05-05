@@ -1,19 +1,32 @@
 !/bin/bash
 
-filePath = "$1"
-destPath = "$2"
+filePath="$1"
 
 chmod 777 "$filePath"
 
+result="SAFE"
+
 if grep -q -P '[^\x00-\x7F]' "$filePath"
 then 
-    mv "$filePath" "$destPath"
-    exit 1
+    result="UNSAFE"
 fi
 if grep -q -E 'malware|dangerous|risk|attack' "$filePath"
 then
-    mv "$filePath" "$destPath"
-    exit 1
-else
-    exit 0
+    result="UNSAFE"
 fi
+
+lineCount=$(wc -l < "$filePath")
+wordCount=$(wc -w < "$filePath")
+caracterCount=$(wc -c < "$filePath")
+
+if ((lineCount < 3 && wordCount > 1000 && caracterCount > 2000))
+then
+    result="UNSAFE"
+fi
+
+if [ -z "$result" ]
+then
+    result="$filePath"
+fi
+
+echo "$result"

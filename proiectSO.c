@@ -13,6 +13,8 @@
 
 #define MAX_SIZE 1024
 
+int nrFisereCorupte = 0;
+
 struct stat statBuffer;
 
 void cloneSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
@@ -108,20 +110,46 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
             if(S_ISREG(statBuffer.st_mode)) {
                 if((statBuffer.st_mode & (S_IRUSR | S_IWUSR | S_IXUSR 
                 | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH)) == 0) {
-                    if((pid = fork()) < 0) {
-                        perror("Error creating process");
-                        exit(1);
-                    }
-                    if(pid == 0) {
-                        /*
-                        Aceasta linie de cod va executa scriptul shell "script.sh", 
-                        transmitandu-i calea "path" și argumentul "izolare".
-                        */
-                        execlp("./script.sh", "script.sh", path, izolare, NULL);
-                        perror("Error creating child process");
-                        exit(1);
-                    }
-                    wstatus = wait(&wstatus);
+                    do{
+                        int pipefd[2];
+                        if(pipe(pipefd) < 0) {
+                            perror("Error creating pipe");
+                            exit(1);
+                        }
+                        if((pid = fork()) < 0) {
+                            perror("Error creating process");
+                            exit(1);
+                        }
+                        if(pid == 0) {
+                            close(pipefd[0]);
+                            /*
+                            redirectam iesirea standard catre capatul de scriere al pipe-ului
+                            */
+                            dup2(pipefd[1], 1);
+                            /*
+                            Aceasta linie de cod va executa scriptul shell "script.sh", 
+                            transmitandu-i calea "path" și argumentul "izolare".
+                            */
+                            execlp("./script.sh", "script.sh", path, NULL);
+                            perror("Error creating child process");
+                            exit(1);
+                        }
+                        else {
+                            close(pipefd[1]);
+                            char message[100] = "";
+                            int count = read(pipefd[0], message, sizeof(message));
+                            close(pipefd[0]);
+                            if(count < 0) {
+                                perror("Error reading from pipe");
+                                exit(1);
+                            }
+                            if(strcmp(message, "SAFE") != 0) {
+                                nrFisereCorupte++;
+                                printf("%s          are %d fisiere corupte\n", message, nrFisereCorupte);
+                            }
+                        }
+                        wstatus = wait(&wstatus);
+                    }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
                 }
                 else {
                     saveSnapshot(path, fd);
@@ -163,6 +191,7 @@ int main(int argc, char *argv[]) {
                 exit(1);
             }
             if(pid == 0) {
+                nrFisereCorupte = 0;
                 char nr1[10] = "";
                 int ino1 = statBuffer.st_ino;
                 /*

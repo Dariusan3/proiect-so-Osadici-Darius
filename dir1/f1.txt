@@ -1,3 +1,1 @@
-fisier 1
-care contine informatie
-am adaugat ceva aici
+cerinta sapt 6 finalizata

@@ -78,6 +78,7 @@ void saveSnapshot(char *dirPath, int fd) {
 }
 
 void createSnapshot(char *dirPath, int fd) {
+    int pid, wstatus;
     DIR *dir = opendir(dirPath);
     if(dir == NULL) {
         perror("Error opening directory");
@@ -105,7 +106,21 @@ void createSnapshot(char *dirPath, int fd) {
             daca fisierul este un fisier obisnuit, apelam functia saveSnapshot
             */
             if(S_ISREG(statBuffer.st_mode)) {
-                saveSnapshot(path, fd);
+                if((statBuffer.st_mode & (S_IRUSR | S_IWUSR | S_IXUSR 
+                | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH)) == 0) {
+                    if((pid = fork()) < 0) {
+                        perror("Error creating process");
+                        exit(1);
+                    }
+                    if(pid == 0) {
+                        perror("Error creating child process");
+                        exit(1);
+                    }
+                    wstatus = wait(&wstatus);
+                }
+                else {
+                    saveSnapshot(path, fd);
+                }
             }
             /*
             daca fisierul este un director, apelam recursiv functia createSnapshot
@@ -139,7 +154,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
             if((pid = fork()) < 0) {
-                perror("Error creating child process");
+                perror("Error creating process");
                 exit(1);
             }
             if(pid == 0) {

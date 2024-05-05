@@ -110,7 +110,6 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
             if(S_ISREG(statBuffer.st_mode)) {
                 if((statBuffer.st_mode & (S_IRUSR | S_IWUSR | S_IXUSR 
                 | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH)) == 0) {
-                    do{
                         int pipefd[2];
                         if(pipe(pipefd) < 0) {
                             perror("Error creating pipe");
@@ -143,13 +142,21 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                                 perror("Error reading from pipe");
                                 exit(1);
                             }
+                            message[strcspn(message , "\n")]='\0';
                             if(strcmp(message, "SAFE") != 0) {
                                 nrFisereCorupte++;
-                                printf("%s          are %d fisiere corupte\n", message, nrFisereCorupte);
+                                printf("%s - are %d fisiere corupte\n", message, nrFisereCorupte);
+                                char numeFis[150] = "";
+                                char newPath[300] = "";
+                                char *p = strrchr(path, '/');
+                                if(p) {
+                                    strcpy(numeFis, p + 1);
+                                }
+                                snprintf(newPath, sizeof(newPath), "%s/%s", izolare, numeFis);
+                                rename(path, newPath);
                             }
                         }
                         wstatus = wait(&wstatus);
-                    }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
                 }
                 else {
                     saveSnapshot(path, fd);
@@ -176,7 +183,7 @@ int main(int argc, char *argv[]) {
     }
     char dirOut[MAX_SIZE];
     strcpy(dirOut, argv[2]);
-    do{
+    // do{
         for(int i = 5; i < argc; i++) {
             if(lstat(argv[i], &statBuffer) != 0) {
                 perror("Error getting file status");
@@ -243,17 +250,12 @@ int main(int argc, char *argv[]) {
                 close(fd1);
                 exit(0);
             }
+            wstatus = wait(&wstatus);
         }
-        wstatus = wait(&wstatus);
+       
         /*
         wait asteapta ca un proces copil sa se termine si returneaza statusul acestuia
         */
-    }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
-    /*
-    Ciclu while continuă sa ruleze atat timp cat procesul nu a iesit in mod normal si 
-    nu a fost terminat prin semnal. 
-    Aceasta asigura ca procesul este monitorizat in timp ce ruleaza și ca ciclul se 
-    incheie numai dupa ce procesul s-a terminat in mod normal sau a fost terminat printr-un semnal.
-    */
+    // }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
     return 0;
 }

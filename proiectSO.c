@@ -43,8 +43,8 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     if(size1 != size2) {
         return 1;
     }
-    char buffer1[MAX_SIZE];
-    char buffer2[MAX_SIZE];
+    char buffer1[MAX_SIZE] = "\0";
+    char buffer2[MAX_SIZE] = "\0";
     int bytesRead1;
     int bytesRead2;
     lseek(fd1, 0, SEEK_SET);
@@ -164,6 +164,7 @@ int main(int argc, char *argv[]) {
             createSnapshot(argv[i], fd2);
             if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
                 printf("The snapshots are identical\n");
+                close(fd2);
                 unlink(numeSnapshot2);
             }
             else {

@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sys/wait.h>
 
 #define MAX_SIZE 1024
 
@@ -118,62 +119,82 @@ void createSnapshot(char *dirPath, int fd) {
     closedir(dir);
 }
 
-int main(int argc, char *argv[]) { 
+int main(int argc, char *argv[]) {
+    int wstatus;
+    int pid;
     if (argc > 12) {
         printf("Usage: %s <directory>\n", argv[0]);
         exit(1);
     }
     char dirOut[MAX_SIZE];
     strcpy(dirOut, argv[2]);
-    for(int i = 3; i < argc; i++) {
-        if(lstat(argv[i], &statBuffer) != 0) {
-            perror("Error getting file status");
-            exit(1);
-        }
-        if(S_ISDIR(statBuffer.st_mode) == 0) {
-            printf("Error: %s is not a directory\n", argv[i]);
-            exit(1);
-        }
-        char numeSnapshot1[MAX_SIZE] = "";
-        strcat(numeSnapshot1, dirOut);
-        strcat(numeSnapshot1, "/snapshot_");
-        strcat(numeSnapshot1, argv[i]);
-        strcat(numeSnapshot1, "_1.txt");
-        int fd1 = open(numeSnapshot1 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-        if(fd1 < 0) {
-            perror("Error opening file");
-            exit(1);
-        }
-        if(lstat(numeSnapshot1, &statBuffer) == 0) {
-            if(statBuffer.st_size == 0) {
-                createSnapshot(argv[i], fd1);
+    do{
+        for(int i = 3; i < argc; i++) {
+            if(lstat(argv[i], &statBuffer) != 0) {
+                perror("Error getting file status");
+                continue;
             }
-
-            char numeSnapshot2[MAX_SIZE] = "";
-            strcat(numeSnapshot2, dirOut);
-            strcat(numeSnapshot2, "/snapshot_");
-            strcat(numeSnapshot2, argv[i]);
-            strcat(numeSnapshot2, "_2.txt");
-
-            int fd2 = open(numeSnapshot2 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-            if(fd2 < 0) {
-                perror("Error opening file");
+            if(S_ISDIR(statBuffer.st_mode) == 0) {
+                printf("Error: %s is not a directory\n", argv[i]);
+                continue;
+            }
+            if((pid = fork()) < 0) {
+                perror("Error creating child process");
                 exit(1);
             }
+            if(pid == 0) {
+                char numeSnapshot1[MAX_SIZE] = "";
+                strcat(numeSnapshot1, dirOut);
+                strcat(numeSnapshot1, "/snapshot_");
+                strcat(numeSnapshot1, argv[i]);
+                strcat(numeSnapshot1, "_1.txt");
+                int fd1 = open(numeSnapshot1 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+                if(fd1 < 0) {
+                    perror("Error opening file");
+                    exit(1);
+                }
+                if(lstat(numeSnapshot1, &statBuffer) == 0) {
+                    if(statBuffer.st_size == 0) {
+                        createSnapshot(argv[i], fd1);
+                    }
+                    char numeSnapshot2[MAX_SIZE] = "";
+                    strcat(numeSnapshot2, dirOut);
+                    strcat(numeSnapshot2, "/snapshot_");
+                    strcat(numeSnapshot2, argv[i]);
+                    strcat(numeSnapshot2, "_2.txt");
 
-            createSnapshot(argv[i], fd2);
-            if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
-                printf("The snapshots are identical\n");
-                close(fd2);
-                unlink(numeSnapshot2);
+                    int fd2 = open(numeSnapshot2 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+                    if(fd2 < 0) {
+                        perror("Error opening file");
+                        exit(1);
+                    }
+
+                    createSnapshot(argv[i], fd2);
+                    if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
+                        printf("The snapshots are identical\n");
+                        close(fd2);
+                        unlink(numeSnapshot2);
+                    }
+                    else {
+                        printf("The snapshots are different\n");
+                        cloneSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2);
+                        unlink(numeSnapshot2);
+                    }
+                }
+                close(fd1);
+                exit(0);
             }
-            else {
-                printf("The snapshots are different\n");
-                cloneSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2);
-                unlink(numeSnapshot2);
-            }
-            close(fd1);
         }
-    }
+        wstatus = wait(&wstatus);
+        /*
+        wait asteapta ca un proces copil sa se termine si returneaza statusul acestuia
+        */
+    }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+    /*
+    Ciclu while continuă sa ruleze atat timp cat procesul nu a iesit in mod normal si 
+    nu a fost terminat prin semnal. 
+    Aceasta asigura ca procesul este monitorizat in timp ce ruleaza și ca ciclul se 
+    incheie numai dupa ce procesul s-a terminat in mod normal sau a fost terminat printr-un semnal.
+    */
     return 0;
 }

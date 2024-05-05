@@ -1,6 +1,6 @@
 dir1/dir3/file.txt 28799 Sun May  5 18:50:34 2024
 
-dir1/f1.txt 33 Sun May  5 19:02:53 2024
+dir1/f1.txt 25 Sun May  5 19:18:48 2024
 
-dir1/f2.txt 33 Sun May  5 19:02:50 2024
+dir1/f2.txt 25 Sun May  5 19:19:11 2024
 

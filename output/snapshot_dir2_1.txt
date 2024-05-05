@@ -1,4 +1,4 @@
-dir2/d2/cerinta2.txt 368 Sun May  5 18:55:28 2024
+dir2/d2/cerinta2.txt 379 Sun May  5 19:19:45 2024
 
 dir2/d2/SDA-Cap 1.pdf 441084 Fri Dec 29 01:50:17 2023
 
@@ -6,7 +6,7 @@ dir2/d2/SDA-Cap 2.pdf 284584 Fri Dec 29 01:50:24 2023
 
 dir2/d2/SDA-Cap 3.pdf 2733656 Fri Dec 29 01:50:30 2023
 
-dir2/f3.txt 78 Sun May  5 18:52:38 2024
+dir2/f3.txt 110 Sun May  5 19:17:51 2024
 
 dir2/f4.txt 56 Sun May  5 18:53:15 2024
 

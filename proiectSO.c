@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #define MAX_SIZE 1024
 
@@ -67,16 +68,12 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
 
 void saveSnapshot(char *dirPath, int fd) {
     /*
-    scriem in fisierul snapshot.txt numele fisierului, dimensiunea si data ultimei modificari
+    snprintf scrie in bufferul aux informatiile despre fisierul dat ca argument
+    write scrie bufferul aux in in fisierul asociat descriptorului fd.
     */
-    if(lstat(dirPath, &statBuffer) == 0) {
-        if(S_ISREG(statBuffer.st_mode)) {
-            dprintf(fd, "%s %ld %s\n", dirPath, statBuffer.st_size, ctime(&statBuffer.st_mtime));
-        }
-    }
-    else {
-        perror("Error getting file status");
-    }
+    char aux[MAX_SIZE];
+    int lengthBuf = snprintf(aux, sizeof(aux), "%s %ld %s\n", dirPath, statBuffer.st_size, ctime(&statBuffer.st_mtime));
+    write(fd, aux, lengthBuf);
 }
 
 void createSnapshot(char *dirPath, int fd) {
@@ -122,62 +119,60 @@ void createSnapshot(char *dirPath, int fd) {
 }
 
 int main(int argc, char *argv[]) { 
-    if (argc != 2) {
+    if (argc > 12) {
         printf("Usage: %s <directory>\n", argv[0]);
         exit(1);
     }
-    if(S_ISDIR(statBuffer.st_mode) != 0) {
-        printf("Error: %s is not a directory\n", argv[1]);
-        exit(1);
-    }
-    /*
-    cream un fisier snapshot.txt in care vom scrie informatii despre fisierele din directorul dat ca argument
-    este deschis pentru citire si scriere, daca fisierul nu exista, 
-    este creat cu drepturi de citire, scriere si executie pentru user, 
-    citire si scriere pentru grup si altii
-    */
-    char numeDir1[MAX_SIZE] = "";
-    strcat(numeDir1, "snapshot_");
-    strcat(numeDir1, argv[1]);
-    strcat(numeDir1, "_1.txt");
-    int fd1 = open(numeDir1 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-    if(fd1 < 0) {
-        perror("Error opening file");
-        exit(1);
-    }
-    if(lstat(argv[1], &statBuffer) == 0) {
-        if(statBuffer.st_size == 0) {
-            createSnapshot(argv[1], fd1);
+    char dirOut[MAX_SIZE];
+    strcpy(dirOut, argv[2]);
+    for(int i = 3; i < argc; i++) {
+        if(lstat(argv[i], &statBuffer) != 0) {
+            perror("Error getting file status");
+            exit(1);
         }
-        char numeDir2[MAX_SIZE] = "";
-        strcat(numeDir2, "snapshot_");
-        strcat(numeDir2, argv[1]);
-        strcat(numeDir2, "_2.txt");
-        int fd2 = open(numeDir2, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-        if(fd2 < 0) {
+        if(S_ISDIR(statBuffer.st_mode) == 0) {
+            printf("Error: %s is not a directory\n", argv[i]);
+            exit(1);
+        }
+        char numeSnapshot1[MAX_SIZE] = "";
+        strcat(numeSnapshot1, dirOut);
+        strcat(numeSnapshot1, "/snapshot_");
+        strcat(numeSnapshot1, argv[i]);
+        strcat(numeSnapshot1, "_1.txt");
+        int fd1 = open(numeSnapshot1 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+        if(fd1 < 0) {
             perror("Error opening file");
             exit(1);
         }
-        /*
-        cream un al doilea fisier snapshot_2.txt in care vom scrie informatii despre fisierele din directorul dat ca argument
-        */
-        createSnapshot(argv[1], fd2);
-        if(comparareSnapshot(numeDir1, fd1, numeDir2, fd2) == 0) {
-            printf("The snapshots are identical\n");
-            unlink(numeDir2);
+        if(lstat(numeSnapshot1, &statBuffer) == 0) {
+            if(statBuffer.st_size == 0) {
+                createSnapshot(argv[i], fd1);
+            }
+
+            char numeSnapshot2[MAX_SIZE] = "";
+            strcat(numeSnapshot2, dirOut);
+            strcat(numeSnapshot2, "/snapshot_");
+            strcat(numeSnapshot2, argv[i]);
+            strcat(numeSnapshot2, "_2.txt");
+
+            int fd2 = open(numeSnapshot2 , O_RDWR | O_CREAT , S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+            if(fd2 < 0) {
+                perror("Error opening file");
+                exit(1);
+            }
+
+            createSnapshot(argv[i], fd2);
+            if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
+                printf("The snapshots are identical\n");
+                unlink(numeSnapshot2);
+            }
+            else {
+                printf("The snapshots are different\n");
+                cloneSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2);
+                unlink(numeSnapshot2);
+            }
+            close(fd1);
         }
-        else {
-            printf("The snapshots are different\n");
-            cloneSnapshot(numeDir1, fd1, numeDir2, fd2);
-            unlink(numeDir2);
-        }
-        /*
-        unlink sterge fisierul snapshot_2.txt dupa ce am terminat de lucrat cu el
-        */
     }
-    else {
-        perror("Error getting file status");
-    }
-    close(fd1);
     return 0;
 }

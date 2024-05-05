@@ -1,1 +1,3 @@
-informatie fisier1
+fisier 1
+care contine informatie
+am adaugat ceva aici

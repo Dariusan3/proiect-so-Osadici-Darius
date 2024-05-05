@@ -77,7 +77,7 @@ void saveSnapshot(char *dirPath, int fd) {
     write(fd, aux, lengthBuf);
 }
 
-void createSnapshot(char *dirPath, int fd) {
+void createSnapshot(char *dirPath, int fd, char izolare[]) {
     int pid, wstatus;
     DIR *dir = opendir(dirPath);
     if(dir == NULL) {
@@ -113,6 +113,11 @@ void createSnapshot(char *dirPath, int fd) {
                         exit(1);
                     }
                     if(pid == 0) {
+                        /*
+                        Aceasta linie de cod va executa scriptul shell "script.sh", 
+                        transmitandu-i calea "path" și argumentul "izolare".
+                        */
+                        execlp("./script.sh", "script.sh", path, izolare, NULL);
                         perror("Error creating child process");
                         exit(1);
                     }
@@ -126,7 +131,7 @@ void createSnapshot(char *dirPath, int fd) {
             daca fisierul este un director, apelam recursiv functia createSnapshot
             */
             else if(S_ISDIR(statBuffer.st_mode)) {
-                createSnapshot(path, fd);
+                createSnapshot(path, fd, izolare);
             }
         }
      
@@ -144,7 +149,7 @@ int main(int argc, char *argv[]) {
     char dirOut[MAX_SIZE];
     strcpy(dirOut, argv[2]);
     do{
-        for(int i = 3; i < argc; i++) {
+        for(int i = 5; i < argc; i++) {
             if(lstat(argv[i], &statBuffer) != 0) {
                 perror("Error getting file status");
                 continue;
@@ -177,7 +182,7 @@ int main(int argc, char *argv[]) {
                 }
                 if(lstat(numeSnapshot1, &statBuffer) == 0) {
                     if(statBuffer.st_size == 0) {
-                        createSnapshot(argv[i], fd1);
+                        createSnapshot(argv[i], fd1, argv[4]);
                     }
                     char nr2[10] = "";
                     int ino2 = statBuffer.st_ino;
@@ -194,7 +199,7 @@ int main(int argc, char *argv[]) {
                         exit(1);
                     }
 
-                    createSnapshot(argv[i], fd2);
+                    createSnapshot(argv[i], fd2, argv[4]);
                     if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
                         printf("The snapshots are identical\n");
                         close(fd2);

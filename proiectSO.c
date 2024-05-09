@@ -15,6 +15,9 @@
 
 int nrFisereCorupte = 0;
 
+char vectorDistinct[10][100] = {""};
+int size_vector = 0;
+
 struct stat statBuffer;
 
 void cloneSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
@@ -25,7 +28,7 @@ void cloneSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     lseek(fd1, 0, SEEK_SET);
     lseek(fd2, 0, SEEK_SET);
     char buffer[MAX_SIZE];
-    int bytesRead;
+    int bytesRead = 0;
     /*
     bytesread retine numarul de octeti cititi din fisierul snapshot1 in fiecare iteratie a buclei
     se citesc octeti din fisierul snapshot1 si se scriu in fisierul snapshot2
@@ -44,7 +47,7 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     fstat(fd2, &statBuffer);
     int size2 = statBuffer.st_size;
     if(size1 != size2) {
-        return 1;
+        return 1;   
     }
     char buffer1[MAX_SIZE] = "\0";
     char buffer2[MAX_SIZE] = "\0";
@@ -54,7 +57,7 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     lseek(fd2, 0, SEEK_SET);
     while((bytesRead1 = read(fd1, buffer1, MAX_SIZE)) > 0 && (bytesRead2 = read(fd2, buffer2, MAX_SIZE)) > 0) {
         if(strlen(buffer1) != strlen(buffer2)) {
-            return 1;
+            return 1;   
         }
         for(int i = 0; buffer1[i]; i++) {
             if(buffer1[i] != buffer2[i]) {
@@ -74,13 +77,14 @@ void saveSnapshot(char *dirPath, int fd) {
     snprintf scrie in bufferul aux informatiile despre fisierul dat ca argument
     write scrie bufferul aux in in fisierul asociat descriptorului fd.
     */
-    char aux[MAX_SIZE];
+    char aux[MAX_SIZE] = "";
     int lengthBuf = snprintf(aux, sizeof(aux), "%s %ld %s\n", dirPath, statBuffer.st_size, ctime(&statBuffer.st_mtime));
     write(fd, aux, lengthBuf);
 }
 
 void createSnapshot(char *dirPath, int fd, char izolare[]) {
     int pid, wstatus;
+    pid_t w;
     DIR *dir = opendir(dirPath);
     if(dir == NULL) {
         perror("Error opening directory");
@@ -155,8 +159,12 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                                 snprintf(newPath, sizeof(newPath), "%s/%s", izolare, numeFis);
                                 rename(path, newPath);
                             }
+                            w = wstatus = wait(&wstatus);
+                            if(w == -1) {
+                                perror("Error waiting for child process");
+                                exit(1);
+                            }
                         }
-                        wstatus = wait(&wstatus);
                 }
                 else {
                     saveSnapshot(path, fd);
@@ -165,9 +173,12 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
             /*
             daca fisierul este un director, apelam recursiv functia createSnapshot
             */
-            else if(S_ISDIR(statBuffer.st_mode)) {
+            else if(S_ISDIR(statBuffer.st_mode) && S_ISLNK(statBuffer.st_mode) == 0) {
                 createSnapshot(path, fd, izolare);
             }
+            /*
+            daca e director si nu e link simbolic, apelam recursiv functia createSnapshot
+            */
         }
      
     }
@@ -175,17 +186,39 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
 }
 
 int main(int argc, char *argv[]) {
-    int wstatus;
-    int pid;
+    pid_t w;
+    int wstatus, pid;
     if (argc > 12) {
         printf("Usage: %s <directory>\n", argv[0]);
         exit(1);
     }
+
+    /*
+    verificam daca nu am pus cumva diretoare cu acelasi nume deoarce daca 
+    am pus acelasi nume de director de mai multe ori, nu are rost sa facem snapshot
+    */
+    for(int i = 5; i < argc; i++) {
+        if(lstat(argv[i], &statBuffer) != 0) {
+            perror("Error getting file status");
+            continue;
+        }
+        if(S_ISDIR(statBuffer.st_mode) && S_ISLNK(statBuffer.st_mode) == 0) {
+            int ok = 0;
+            for(int j = 0; j < size_vector; j++) {
+                if(strcmp(vectorDistinct[j], argv[i]) == 0) {
+                    ok = 1;
+                    break;
+                }
+            }
+            if(ok == 0) {
+                strcpy(vectorDistinct[size_vector++], argv[i]);
+            }
+        }
+    }
     char dirOut[MAX_SIZE];
     strcpy(dirOut, argv[2]);
-    // do{
-        for(int i = 5; i < argc; i++) {
-            if(lstat(argv[i], &statBuffer) != 0) {
+        for(int i = 0; i < size_vector; i++) {
+            if(lstat(vectorDistinct[i], &statBuffer) != 0) {
                 perror("Error getting file status");
                 continue;
             }
@@ -218,7 +251,7 @@ int main(int argc, char *argv[]) {
                 }
                 if(lstat(numeSnapshot1, &statBuffer) == 0) {
                     if(statBuffer.st_size == 0) {
-                        createSnapshot(argv[i], fd1, argv[4]);
+                        createSnapshot(vectorDistinct[i], fd1, argv[4]);
                     }
                     char nr2[10] = "";
                     int ino2 = statBuffer.st_ino;
@@ -235,7 +268,7 @@ int main(int argc, char *argv[]) {
                         exit(1);
                     }
 
-                    createSnapshot(argv[i], fd2, argv[4]);
+                    createSnapshot(vectorDistinct[i], fd2, argv[4]);
                     if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
                         printf("The snapshots are identical\n");
                         close(fd2);
@@ -247,15 +280,27 @@ int main(int argc, char *argv[]) {
                         unlink(numeSnapshot2);
                     }
                 }
-                close(fd1);
-                exit(0);
+                exit(nrFisereCorupte);
             }
-            wstatus = wait(&wstatus);
         }
-       
-        /*
-        wait asteapta ca un proces copil sa se termine si returneaza statusul acestuia
-        */
-    // }while(!WIFEXITED(wstatus) && !WIFSIGNALED(wstatus));
+        for(int i = 0; i < size_vector; i++) {
+            w = wait(&wstatus);
+            if(w == -1) {
+                perror("Error waiting for child process");
+                exit(1);
+            }
+            if(WIFEXITED(wstatus)) {
+                printf("Procesul Copil %d s-a incheiat cu PID-ul %d si cu %d fisiere cu potential periculos\n", i + 1 , w , WEXITSTATUS(wstatus));
+            }
+            else if(WIFSIGNALED(wstatus)) {
+                printf("Procesul Copil %d a fost terminat fortat cu PID-ul %d si cu %d fisiere cu potential periculos\n", i + 1 , w , WTERMSIG(wstatus));
+            }
+            else if(WIFSTOPPED(wstatus)) {
+                printf("Procesul Copil %d a fost oprit cu PID-ul %d si cu %d fisiere cu potential periculos\n", i + 1 , w , WSTOPSIG(wstatus));
+            }
+            else if(WIFCONTINUED(wstatus)) {
+                printf("Procesul Copil %d a fost continuat cu PID-ul %d si cu %d fisiere cu potential periculos\n", i + 1 , w , WEXITSTATUS(wstatus));
+            }
+        }
     return 0;
 }

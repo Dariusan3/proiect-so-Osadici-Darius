@@ -33,8 +33,8 @@ void cloneSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     bytesread retine numarul de octeti cititi din fisierul snapshot1 in fiecare iteratie a buclei
     se citesc octeti din fisierul snapshot1 si se scriu in fisierul snapshot2
     */
-    while((bytesRead = read(fd1, buffer, MAX_SIZE)) > 0) {
-        write(fd2, buffer, bytesRead);
+    while((bytesRead = read(fd2, buffer, MAX_SIZE)) > 0) {
+        write(fd1, buffer, bytesRead);
     }
 }
 
@@ -46,7 +46,7 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
     int size1 = statBuffer.st_size;
     fstat(fd2, &statBuffer);
     int size2 = statBuffer.st_size;
-    if(size1 != size2) {
+    if(size1 != size2) { // daca au dimensiuni diferite returnam direct 1
         return 1;   
     }
     char buffer1[MAX_SIZE] = "\0";
@@ -59,7 +59,7 @@ int comparareSnapshot(char snapshot1[], int fd1, char snapshot2[], int fd2) {
         if(strlen(buffer1) != strlen(buffer2)) {
             return 1;   
         }
-        for(int i = 0; buffer1[i]; i++) {
+        for(int i = 0; buffer1[i]; i++) { //verificare caracter cu caracter intre snapshoturi
             if(buffer1[i] != buffer2[i]) {
                 return 1;
             }
@@ -111,20 +111,21 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
             /*
             daca fisierul este un fisier obisnuit, apelam functia saveSnapshot
             */
+            // testam daca fisierul la care s-a ajuns are drepturile setate pe 000
             if(S_ISREG(statBuffer.st_mode)) {
                 if((statBuffer.st_mode & (S_IRUSR | S_IWUSR | S_IXUSR 
                 | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH)) == 0) {
                         int pipefd[2];
-                        if(pipe(pipefd) < 0) {
+                        if(pipe(pipefd) < 0) { //cream pipe
                             perror("Error creating pipe");
                             exit(1);
                         }
-                        if((pid = fork()) < 0) {
+                        if((pid = fork()) < 0) { //cream proces pentru procesul potential corupt
                             perror("Error creating process");
                             exit(1);
                         }
                         if(pid == 0) {
-                            close(pipefd[0]);
+                            close(pipefd[0]); // inchidem capatul de fisier
                             /*
                             redirectam iesirea standard catre capatul de scriere al pipe-ului
                             */
@@ -134,11 +135,12 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                             transmitandu-i calea "path" și argumentul "izolare".
                             */
                             execlp("./script.sh", "script.sh", path, NULL);
+                            //la secventa de mai jos se ajunge doar daca exec s a terminat cu eroare
                             perror("Error creating child process");
                             exit(1);
                         }
                         else {
-                            close(pipefd[1]);
+                            close(pipefd[1]); //se inchide capatul de scriere
                             char message[100] = "";
                             int count = read(pipefd[0], message, sizeof(message));
                             close(pipefd[0]);
@@ -146,6 +148,8 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                                 perror("Error reading from pipe");
                                 exit(1);
                             }
+
+                            //punem terminatorul de sir la sfarsitul mesajului in loc de enter
                             message[strcspn(message , "\n")]='\0';
                             if(strcmp(message, "SAFE") != 0) {
                                 nrFisereCorupte++;
@@ -156,6 +160,9 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                                 if(p) {
                                     strcpy(numeFis, p + 1);
                                 }
+
+                                //cream noul path catre directorul izolare si pentru mutare folosesc 
+                                //functia rename care modifica pathul initial in pathul final
                                 snprintf(newPath, sizeof(newPath), "%s/%s", izolare, numeFis);
                                 rename(path, newPath);
                             }
@@ -167,20 +174,16 @@ void createSnapshot(char *dirPath, int fd, char izolare[]) {
                         }
                 }
                 else {
-                    saveSnapshot(path, fd);
+                    saveSnapshot(path, fd); //cazul in care fisierul are drepturi
                 }
             }
-            /*
-            daca fisierul este un director, apelam recursiv functia createSnapshot
+           /*
+            daca e director si nu e link simbolic, apelam recursiv functia createSnapshot
             */
             else if(S_ISDIR(statBuffer.st_mode) && S_ISLNK(statBuffer.st_mode) == 0) {
                 createSnapshot(path, fd, izolare);
             }
-            /*
-            daca e director si nu e link simbolic, apelam recursiv functia createSnapshot
-            */
         }
-     
     }
     closedir(dir);
 }
@@ -202,6 +205,13 @@ int main(int argc, char *argv[]) {
             perror("Error getting file status");
             continue;
         }
+        if(S_ISDIR(statBuffer.st_mode) == 0) {
+            printf("Error: %s is not a directory\n", argv[i]);
+            continue;
+        }
+
+        //folosim un tablou cu care contine doar directoarele date ca argument si care sunt unice
+        //si care respecta cerinta sa fie directoare
         if(S_ISDIR(statBuffer.st_mode) && S_ISLNK(statBuffer.st_mode) == 0) {
             int ok = 0;
             for(int j = 0; j < size_vector; j++) {
@@ -226,11 +236,11 @@ int main(int argc, char *argv[]) {
                 printf("Error: %s is not a directory\n", argv[i]);
                 continue;
             }
-            if((pid = fork()) < 0) {
+            if((pid = fork()) < 0) { //creez un proces fiu pentru fiecare argument director unic
                 perror("Error creating process");
                 exit(1);
             }
-            if(pid == 0) {
+            if(pid == 0) { //se executa codul fiului
                 nrFisereCorupte = 0;
                 char nr1[10] = "";
                 int ino1 = statBuffer.st_ino;
@@ -239,6 +249,8 @@ int main(int argc, char *argv[]) {
                 si este stocat in variabila ino1.
                 */
                 sprintf(nr1, "%d", ino1);
+
+                //se creeaza path-ul catre directorul de output unde va fi creat si mutat snapshotul
                 char numeSnapshot1[MAX_SIZE] = "";
                 strcat(numeSnapshot1, dirOut);
                 strcat(numeSnapshot1, "/snapshot_");
@@ -250,9 +262,14 @@ int main(int argc, char *argv[]) {
                     exit(1);
                 }
                 if(lstat(numeSnapshot1, &statBuffer) == 0) {
-                    if(statBuffer.st_size == 0) {
+                    //daca fisierul de snapshot este gol inseamna ca nu s-a inceput versionarea si 
+                    //apelam functia de create snapshot
+                    if(statBuffer.st_size == 0) { 
                         createSnapshot(vectorDistinct[i], fd1, argv[4]);
                     }
+
+                    //daca un fisier de snapshot exista, se creeaza inca o versiune a lui pentru 
+                    //a compara ulterior cele doua versiuni
                     char nr2[10] = "";
                     int ino2 = statBuffer.st_ino;
                     sprintf(nr2, "%d", ino2);
@@ -271,6 +288,7 @@ int main(int argc, char *argv[]) {
                     createSnapshot(vectorDistinct[i], fd2, argv[4]);
                     if(comparareSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2) == 0) {
                         printf("The snapshots are identical\n");
+                        close(fd1);
                         close(fd2);
                         unlink(numeSnapshot2);
                     }
@@ -278,11 +296,19 @@ int main(int argc, char *argv[]) {
                         printf("The snapshots are different\n");
                         cloneSnapshot(numeSnapshot1, fd1, numeSnapshot2, fd2);
                         unlink(numeSnapshot2);
+                        close(fd1);
+                        close(fd2);
                     }
                 }
+                //codul returnat al procesului va fi numarul de fisiere corupte continute de directorul
+                //dat ca argument
                 exit(nrFisereCorupte);
             }
         }
+        /*
+        size_vector este numarul exact de directoare unice, astfel se va astepta dupa size_vector procese
+        si se va lua pentru fiecare pid-ul si codul
+        */
         for(int i = 0; i < size_vector; i++) {
             w = wait(&wstatus);
             if(w == -1) {

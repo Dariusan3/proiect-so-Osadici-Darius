@@ -24,7 +24,7 @@ then
     result="UNSAFE"
 fi
 
-if [ "UNSAFE" == "$result" ]
+if [ "UNSAFE" == "$result" ];
 then
     result="$filePath"
 fi
